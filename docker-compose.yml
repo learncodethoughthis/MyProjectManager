@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+      - SPRING_REDIS_PASSWORD=9112000
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/projectmanagerdb?createDatabaseIfNotExist=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=9112000
+      - MINIO_URL=http://minio:9000
+      - MINIO_PUBLIC_URL=http://localhost:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET_NAME=taskdocuments
+      - MINIO_REGION=ap-southeast-1
+      - MINIO_SECURE=false
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    networks:
+      - myproject_app-network
+    restart: unless-stopped
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: myproject-minio-1
+    ports:
+      - "9000:9000"
+      - "9002:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+      - MINIO_REGION=ap-southeast-1
+      - MINIO_SERVER_URL=http://minio:9000
+      - MINIO_LOG_QUERY=true
+    command: server /data --address ":9000" --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - myproject_app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    container_name: redis-server
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass 9112000
+    volumes:
+      - redis-data:/data
+    networks:
+      - myproject_app-network
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=9112000
+      - MYSQL_DATABASE=projectmanagerdb
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - myproject_app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p9112000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  myproject_app-network:
+    driver: bridge
+
+volumes:
+  minio-data:
+  redis-data:
+  mysql-data:
